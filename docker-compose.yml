@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  indextts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: indextts-app
+    ports:
+      - "7860:7860"
+    volumes:
+      # 挂载checkpoints目录用于模型文件
+      - ./checkpoints:/app/checkpoints
+      # 挂载test_data目录用于输入音频
+      - ./test_data:/app/test_data
+      # 挂载输出目录
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+      # 如果在中国，可以设置HuggingFace镜像
+      # - HF_ENDPOINT=https://hf-mirror.com
+    restart: unless-stopped
+    # 如果需要GPU支持，取消注释以下行
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # 可选：添加一个用于下载模型的初始化容器
+  model-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: indextts-model-downloader
+    volumes:
+      - ./checkpoints:/app/checkpoints
+    environment:
+      - HF_ENDPOINT=https://hf-mirror.com
+    command: >
+      sh -c "
+        if [ ! -f /app/checkpoints/gpt.pth ]; then
+          echo 'Downloading IndexTTS-1.5 models...';
+          huggingface-cli download IndexTeam/IndexTTS-1.5 \
+            config.yaml bigvgan_discriminator.pth bigvgan_generator.pth \
+            bpe.model dvae.pth gpt.pth unigram_12000.vocab \
+            --local-dir /app/checkpoints;
+          echo 'Model download completed!';
+        else
+          echo 'Models already exist, skipping download.';
+        fi
+      "
+    profiles:
+      - tools
+
+volumes:
+  checkpoints:
+  test_data:
+  outputs:
